@@ -1,0 +1,6 @@
+
+PACKAGE = 'mqtt'
+
+LIB = ['mosquitto']
+
+require "#{ENV['CORTO_BUILD']}/package"

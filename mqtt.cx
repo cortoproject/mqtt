@@ -1,0 +1,15 @@
+#package ::mqtt
+
+class Connector: replicator,hidden::
+    host: string
+    alias mount: replicator::mount
+    debug: bool, hidden
+    client: word, private
+
+    int16 construct()
+    void destruct()
+
+    void onDeclare(object observable)
+    void onUpdate(object observable)
+    void onDelete(object observable)
+    void onInvoke(object instance, function f, octetseq args)
