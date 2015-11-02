@@ -1,6 +1,4 @@
 
-PACKAGE = 'mqtt'
-
-LIB = ['mosquitto']
+PACKAGE = 'corto::mqtt'
 
 require "#{ENV['CORTO_BUILD']}/package"

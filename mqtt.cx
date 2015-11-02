@@ -1,4 +1,4 @@
-#package ::mqtt
+#package ::corto::mqtt
 
 class Connector: replicator,hidden::
     host: string

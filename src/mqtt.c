@@ -1,9 +1,9 @@
-/* mqtt.c
+/* $CORTO_GENERATED
  *
- * This file contains the implementation for the generated interface.
+ * mqtt.c
  *
- * Don't mess with the begin and end tags, since these will ensure that modified
- * code in interface functions isn't replaced when code is re-generated.
+ * Only code written between the begin and end tags will be preserved
+ * when the file is regenerated.
  */
 
 #include "mqtt.h"

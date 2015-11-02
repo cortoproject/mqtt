@@ -1,9 +1,9 @@
-/* mqtt_Connector.c
+/* $CORTO_GENERATED
  *
- * This file contains the implementation for the generated interface.
+ * mqtt_Connector.c
  *
- * Don't mess with the begin and end tags, since these will ensure that modified
- * code in interface functions isn't replaced when code is re-generated.
+ * Only code written between the begin and end tags will be preserved
+ * when the file is regenerated.
  */
 
 #include "mqtt.h"
@@ -11,105 +11,13 @@
 /* $header() */
 #include "mosquitto.h"
 
-static void mqtt_onMessage(
-    struct mosquitto *client,
-    void *data, 
-    const struct mosquitto_message *msg) 
-{
-    CORTO_UNUSED(client);
-    corto_id name;
-    corto_object o = NULL;
-    mqtt_Connector this = data;
-    char *ptr = msg->topic;
-    char *valueStr = strchr(msg->payload, '{');
-
-    printf("mqtt: recv '%s' => '%s'\n", msg->topic, msg->payload);
-
-    corto_object owner = corto_setOwner(this);
-
-    /* Extract name from topic */
-    do {
-        strcpy(name, ptr + 1);
-    } while((ptr = strchr(ptr + 1, '/')));
-
-    printf("mqtt: received update for '%s'\n", name);
-
-    if ((o = corto_resolve(corto_replicator(this)->mount, name))) {
-        printf("mqtt: '%s' already exists, deserializing...\n", corto_nameof(o));
-        if (corto_updateBegin(o)) {
-            if (corto_fromStr(&o, valueStr)) {
-                corto_error("mqtt: failed to deserialize for %s (%s)\n", name, msg->payload);
-                return;
-            }
-            corto_updateEnd(o);
-        }
-    } else {
-        corto_id buffer; strcpy(buffer, msg->payload);
-        char *typeStr = strchr(buffer, '{');
-        *typeStr = '\0';
-
-        printf("mqtt: resolve type '%s'\n", buffer);
-        corto_object type = corto_resolve(NULL, buffer);
-        if (!type) {
-            corto_error("type '%s' not found", buffer);
-            return;
-        }
-
-        printf("mqtt: create new object '%s'\n", name);
-        o = corto_declareChild(corto_replicator(this)->mount, name, type);
-        if (!o) {
-            corto_error("mqtt: failed to create object '%s'", name);
-            return;
-        }
-
-        printf("mqtt: deserializing... '%s'\n", corto_nameof(o));
-        if (corto_fromStr(&o, valueStr)) {
-            corto_error("mqtt: failed to deserialize for %s (%s)", name, msg->payload);
-            return;
-        }
-
-        printf("mqtt: define object\n");
-        if (corto_define(o)) {
-            corto_error("mqtt: failed to define '%s'", corto_nameof(o));
-            return;
-        }
-    }
-    printf("mqtt: recv: OK\n");
-
-    corto_setOwner(owner);
-}
-
-static void mqtt_onPublish(
-    struct mosquitto *client,
-    void *data,
-    int mid)
-{
-    CORTO_UNUSED(client);
-    CORTO_UNUSED(data);
-    CORTO_UNUSED(mid);  
-}    
-
-static void mqtt_onConnect(
-    struct mosquitto *client,
-    void *something,
-    int rc) 
-{
-    if (rc != 0) {
-        corto_seterr("mqtt: unable to connect");
-    }
-}
-
-static void mqtt_onLog(struct mosquitto *mosq, void *obj, int level, const char *str)
-{
-    printf("%s\n", str);
-}
-
 static void mqtt_nameToPath(corto_object o, corto_id buffer) {
     corto_char *ptr = buffer, *bptr, ch;
     bptr = ptr;
 
     if (o) {
         corto_fullname(o, buffer);
+        ptr += 2; /* Skip initial :: */
         for (; (ch = *ptr); ptr++, bptr++) {
             if (ch == ':') {
                 *bptr = '/';
@@ -123,15 +31,118 @@ static void mqtt_nameToPath(corto_object o, corto_id buffer) {
     *bptr = '\0';
 }
 
+static void mqtt_onMessage(
+    struct mosquitto *client,
+    void *data, 
+    const struct mosquitto_message *msg) 
+{
+    CORTO_UNUSED(client);
+    corto_id name;
+    corto_object o = NULL;
+    mqtt_Connector this = data;
+    char *ptr = msg->topic;
+    char *valueStr = strchr(msg->payload, '{');
+
+    corto_object owner = corto_setOwner(this);
+
+    /* Extract name from topic */
+    strcpy(name, ptr);
+    while((ptr = strchr(ptr + 1, '/'))) {
+        strcpy(name, ptr + 1);
+    }
+
+    if ((o = corto_resolve(corto_replicator(this)->mount, name))) {
+        if ((corto_ownerof(o) == this) && corto_updateBegin(o)) {
+            if (corto_fromStr(&o, valueStr)) {
+                corto_error("mqtt: failed to deserialize for %s: %s (%s)\n", 
+                    name, 
+                    corto_lasterr(), 
+                    msg->payload);
+                return;
+            }
+            corto_updateEnd(o);
+        }
+    } else {
+        corto_id buffer; strcpy(buffer, msg->payload);
+        char *typeStr = strchr(buffer, '{');
+        *typeStr = '\0';
+
+        corto_object type = corto_resolve(NULL, buffer);
+        if (!type) {
+            corto_error("type '%s' not found", buffer);
+            return;
+        }
+
+        o = corto_declareChild(corto_replicator(this)->mount, name, type);
+        if (!o) {
+            corto_error("mqtt: failed to create object '%s'", name);
+            return;
+        }
+
+        if (corto_fromStr(&o, valueStr)) {
+            corto_error("mqtt: failed to deserialize for %s: %s (%s)", 
+                name, 
+                corto_lasterr(),
+                msg->payload);
+            return;
+        }
+
+        if (corto_define(o)) {
+            corto_error("mqtt: failed to define '%s'", corto_nameof(o));
+            return;
+        }
+    }
+
+    corto_setOwner(owner);
+}
+
+static void mqtt_onPublish(
+    struct mosquitto *client,
+    void *data,
+    int mid)
+{
+    CORTO_UNUSED(client);
+    CORTO_UNUSED(data);
+    CORTO_UNUSED(mid);
+}    
+
+static void mqtt_onConnect(
+    struct mosquitto *client,
+    void *data,
+    int rc) 
+{
+    mqtt_Connector this = data;
+    if (rc != 0) {
+        corto_seterr("mqtt: unable to connect");
+    } else {
+        corto_id topic;
+
+        /* Subscribe to subtree of mountpoint */
+        mqtt_nameToPath(corto_replicator(this)->mount, topic);
+        if (*topic) {
+            strcat(topic, "/#");
+        } else {
+            strcat(topic, "#");
+        }
+
+        if (mosquitto_subscribe((struct mosquitto*)this->client, 0, topic, 1)) {
+            corto_error("mqtt: failed to subscribe for topic");
+        }
+    }
+}
+
+static void mqtt_onLog(struct mosquitto *mosq, void *obj, int level, const char *str)
+{
+    printf("%s\n", str);
+}
+
 /* $end */
 
-/* ::mqtt::Connector::construct() */
 corto_int16 _mqtt_Connector_construct(mqtt_Connector this) {
-/* $begin(::mqtt::Connector::construct) */
+/* $begin(::corto::mqtt::Connector::construct) */
     struct mosquitto *mosq = mosquitto_new(NULL, TRUE, this);
     corto_id host;
     corto_uint16 port;
-    corto_id topic;
 
     /* Strip out port from hostname */
     strcpy(host, this->host);
@@ -173,67 +184,71 @@ corto_int16 _mqtt_Connector_construct(mqtt_Connector this) {
         goto error;
     }
 
-    mqtt_nameToPath(corto_replicator(this)->mount, topic);
-    strcat(topic, "/#");
-    if (mosquitto_subscribe(mosq, 0, topic, 1)) {
-        corto_error("mqtt: failed to subscribe for topic");
-        goto error;
-    }
-
     return corto_replicator_construct(this);
 error:
     return -1;
 /* $end */
 }
 
-/* ::mqtt::Connector::destruct() */
 corto_void _mqtt_Connector_destruct(mqtt_Connector this) {
-/* $begin(::mqtt::Connector::destruct) */
+/* $begin(::corto::mqtt::Connector::destruct) */
 
-    mosquitto_loop_stop((struct mosquitto*)this->client, true);
+    mosquitto_disconnect((struct mosquitto*)this->client);
+    mosquitto_loop_stop((struct mosquitto*)this->client, false);
 
 /* $end */
 }
 
-/* ::mqtt::Connector::onDeclare(object observable) */
 corto_void _mqtt_Connector_onDeclare(mqtt_Connector this, corto_object observable) {
-/* $begin(::mqtt::Connector::onDeclare) */
+/* $begin(::corto::mqtt::Connector::onDeclare) */
 
     /* << Insert implementation >> */
 
 /* $end */
 }
 
-/* ::mqtt::Connector::onDelete(object observable) */
 corto_void _mqtt_Connector_onDelete(mqtt_Connector this, corto_object observable) {
-/* $begin(::mqtt::Connector::onDelete) */
+/* $begin(::corto::mqtt::Connector::onDelete) */
 
     /* << Insert implementation >> */
 
 /* $end */
 }
 
-/* ::mqtt::Connector::onInvoke(object instance,function f,octetseq args) */
 corto_void _mqtt_Connector_onInvoke(mqtt_Connector this, corto_object instance, corto_function f, corto_octetseq args) {
-/* $begin(::mqtt::Connector::onInvoke) */
+/* $begin(::corto::mqtt::Connector::onInvoke) */
 
     /* << Insert implementation >> */
 
 /* $end */
 }
 
-/* ::mqtt::Connector::onUpdate(object observable) */
 corto_void _mqtt_Connector_onUpdate(mqtt_Connector this, corto_object observable) {
-/* $begin(::mqtt::Connector::onUpdate) */
+/* $begin(::corto::mqtt::Connector::onUpdate) */
+
     int ret = 0;
     corto_id topic;
-    corto_id type;
-    corto_string payload = NULL;
+    corto_id typeName;
+    corto_string payload = NULL, value = NULL;
+    corto_int32 mid = 0;
+    corto_type t = corto_typeof(observable);
+    
+    if (corto_parentof(t) == corto_lang_o) {
+        strcpy(typeName, corto_nameof(t));
+    } else {
+        corto_fullname(t, typeName);
+    }
 
     mqtt_nameToPath(observable, topic);
-    corto_asprintf(&payload, "%s{%s}", corto_fullname(corto_typeof(observable), type), corto_str(observable, 0));
+    value = corto_str(observable, 0);
+    if (value[0] == '{') {
+        corto_asprintf(&payload, "%s%s", typeName, value);
+    } else {
+        corto_asprintf(&payload, "%s{%s}", typeName, value);
+    }
+    corto_dealloc(value);
 
-    if ((ret = mosquitto_publish((struct mosquitto*)this->client, NULL, topic, strlen(payload) + 1, payload, 1, FALSE))) {
+    if ((ret = mosquitto_publish((struct mosquitto*)this->client, &mid, topic, strlen(payload) + 1, payload, 1, FALSE))) {
         switch (ret) {
         case MOSQ_ERR_INVAL: corto_error("mqtt: publish failed: invalid input"); break;
         case MOSQ_ERR_NOMEM: corto_error("mqtt: publish failed: out of memory"); break;
