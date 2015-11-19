@@ -11,30 +11,10 @@
 /* $header() */
 #include "mosquitto.h"
 
-static void mqtt_nameToPath(corto_object o, corto_id buffer) {
-    corto_char *ptr = buffer, *bptr, ch;
-    bptr = ptr;
-
-    if (o) {
-        corto_fullname(o, buffer);
-        ptr += 2; /* Skip initial :: */
-        for (; (ch = *ptr); ptr++, bptr++) {
-            if (ch == ':') {
-                *bptr = '/';
-                ptr++;
-            } else {
-                *bptr = ch;
-            }
-        }
-    }
-
-    *bptr = '\0';
-}
-
 static void mqtt_onMessage(
     struct mosquitto *client,
-    void *data, 
-    const struct mosquitto_message *msg) 
+    void *data,
+    const struct mosquitto_message *msg)
 {
     CORTO_UNUSED(client);
     corto_id name;
@@ -52,20 +32,21 @@ static void mqtt_onMessage(
     }
 
     if ((o = corto_resolve(corto_replicator(this)->mount, name))) {
-        if ((corto_ownerof(o) == this) && corto_updateBegin(o)) {
+        if ((corto_ownerof(o) == this) && !corto_updateBegin(o)) {
             if (corto_fromStr(&o, valueStr)) {
-                corto_error("mqtt: failed to deserialize for %s: %s (%s)\n", 
-                    name, 
-                    corto_lasterr(), 
+                corto_error("mqtt: failed to deserialize for %s: %s (%s)\n",
+                    name,
+                    corto_lasterr(),
                     msg->payload);
                 return;
             }
             corto_updateEnd(o);
         }
     } else {
-        corto_id buffer; strcpy(buffer, msg->payload);
-        char *typeStr = strchr(buffer, '{');
-        *typeStr = '\0';
+        corto_id buffer;
+        char *typeStr = strchr(msg->payload, '{');
+        memcpy(buffer, msg->payload, typeStr - (char*)msg->payload);
+        buffer[typeStr - (char*)msg->payload] = '\0';
 
         corto_object type = corto_resolve(NULL, buffer);
         if (!type) {
@@ -80,8 +61,8 @@ static void mqtt_onMessage(
         }
 
         if (corto_fromStr(&o, valueStr)) {
-            corto_error("mqtt: failed to deserialize for %s: %s (%s)", 
-                name, 
+            corto_error("mqtt: failed to deserialize for %s: %s (%s)",
+                name,
                 corto_lasterr(),
                 msg->payload);
             return;
@@ -104,25 +85,25 @@ static void mqtt_onPublish(
     CORTO_UNUSED(client);
     CORTO_UNUSED(data);
     CORTO_UNUSED(mid);
-}    
+}
 
 static void mqtt_onConnect(
     struct mosquitto *client,
     void *data,
-    int rc) 
+    int rc)
 {
     mqtt_Connector this = data;
     if (rc != 0) {
-        corto_seterr("mqtt: unable to connect");
+        corto_error("mqtt: unable to connect");
     } else {
         corto_id topic;
 
         /* Subscribe to subtree of mountpoint */
-        mqtt_nameToPath(corto_replicator(this)->mount, topic);
-        if (*topic) {
+        corto_fullname(corto_replicator(this)->mount, topic);
+        if (*topic && strcmp(topic, "/")) {
             strcat(topic, "/#");
         } else {
-            strcat(topic, "#");
+            strcpy(topic, "#");
         }
 
         if (mosquitto_subscribe((struct mosquitto*)this->client, 0, topic, 1)) {
@@ -139,7 +120,7 @@ static void mqtt_onLog(struct mosquitto *mosq, void *obj, int level, const char 
 /* $end */
 
 corto_int16 _mqtt_Connector_construct(mqtt_Connector this) {
-/* $begin(::corto::mqtt::Connector::construct) */
+/* $begin(corto/mqtt/Connector/construct) */
     struct mosquitto *mosq = mosquitto_new(NULL, TRUE, this);
     corto_id host;
     corto_uint16 port;
@@ -191,7 +172,7 @@ error:
 }
 
 corto_void _mqtt_Connector_destruct(mqtt_Connector this) {
-/* $begin(::corto::mqtt::Connector::destruct) */
+/* $begin(corto/mqtt/Connector/destruct) */
 
     mosquitto_disconnect((struct mosquitto*)this->client);
     mosquitto_loop_stop((struct mosquitto*)this->client, false);
@@ -200,7 +181,7 @@ corto_void _mqtt_Connector_destruct(mqtt_Connector this) {
 }
 
 corto_void _mqtt_Connector_onDeclare(mqtt_Connector this, corto_object observable) {
-/* $begin(::corto::mqtt::Connector::onDeclare) */
+/* $begin(corto/mqtt/Connector/onDeclare) */
 
     /* << Insert implementation >> */
 
@@ -208,7 +189,7 @@ corto_void _mqtt_Connector_onDeclare(mqtt_Connector this, corto_object observabl
 }
 
 corto_void _mqtt_Connector_onDelete(mqtt_Connector this, corto_object observable) {
-/* $begin(::corto::mqtt::Connector::onDelete) */
+/* $begin(corto/mqtt/Connector/onDelete) */
 
     /* << Insert implementation >> */
 
@@ -216,7 +197,7 @@ corto_void _mqtt_Connector_onDelete(mqtt_Connector this, corto_object observable
 }
 
 corto_void _mqtt_Connector_onInvoke(mqtt_Connector this, corto_object instance, corto_function f, corto_octetseq args) {
-/* $begin(::corto::mqtt::Connector::onInvoke) */
+/* $begin(corto/mqtt/Connector/onInvoke) */
 
     /* << Insert implementation >> */
 
@@ -224,7 +205,7 @@ corto_void _mqtt_Connector_onInvoke(mqtt_Connector this, corto_object instance, 
 }
 
 corto_void _mqtt_Connector_onUpdate(mqtt_Connector this, corto_object observable) {
-/* $begin(::corto::mqtt::Connector::onUpdate) */
+/* $begin(corto/mqtt/Connector/onUpdate) */
 
     int ret = 0;
     corto_id topic;
@@ -232,14 +213,14 @@ corto_void _mqtt_Connector_onUpdate(mqtt_Connector this, corto_object observable
     corto_string payload = NULL, value = NULL;
     corto_int32 mid = 0;
     corto_type t = corto_typeof(observable);
-    
+
     if (corto_parentof(t) == corto_lang_o) {
         strcpy(typeName, corto_nameof(t));
     } else {
         corto_fullname(t, typeName);
     }
 
-    mqtt_nameToPath(observable, topic);
+    corto_fullname(observable, topic);
     value = corto_str(observable, 0);
     if (value[0] == '{') {
         corto_asprintf(&payload, "%s%s", typeName, value);
@@ -248,7 +229,7 @@ corto_void _mqtt_Connector_onUpdate(mqtt_Connector this, corto_object observable
     }
     corto_dealloc(value);
 
-    if ((ret = mosquitto_publish((struct mosquitto*)this->client, &mid, topic, strlen(payload) + 1, payload, 1, FALSE))) {
+    if ((ret = mosquitto_publish((struct mosquitto*)this->client, &mid, topic + 1, strlen(payload) + 1, payload, 1, FALSE))) {
         switch (ret) {
         case MOSQ_ERR_INVAL: corto_error("mqtt: publish failed: invalid input"); break;
         case MOSQ_ERR_NOMEM: corto_error("mqtt: publish failed: out of memory"); break;
