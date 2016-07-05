@@ -1,4 +1,4 @@
-# ::corto::mqtt
+# /corto/mqtt
 
 ## Connector
 ### client
@@ -12,9 +12,5 @@
 #### observable
 ### onDelete(object observable)
 #### observable
-### onInvoke(object instance,function f,octetseq args)
-#### instance
-#### f
-#### args
 ### onUpdate(object observable)
 #### observable

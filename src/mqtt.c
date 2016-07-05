@@ -6,10 +6,11 @@
  * when the file is regenerated.
  */
 
-#include "mqtt.h"
+#include <corto/mqtt/mqtt.h>
 
 /* $header() */
 #include "mosquitto.h"
+corto_uint8 MQTT_KEY_CLIENT;
 /* $end */
 
 int mqttMain(int argc, char* argv[]) {
@@ -17,6 +18,7 @@ int mqttMain(int argc, char* argv[]) {
     /* Insert code that must be run when component is loaded */
     CORTO_UNUSED(argc);
     CORTO_UNUSED(argv);
+    MQTT_KEY_CLIENT = corto_olsKey(NULL);
     mosquitto_lib_init();
     return 0;
 /* $end */
