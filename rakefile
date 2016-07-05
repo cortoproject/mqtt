@@ -1,4 +1,7 @@
 
 PACKAGE = 'corto/mqtt'
 
+INCLUDE = ['src/mosquitto']
+INCLUDE_PUBLIC = ['.'] # do not expose src/mosquitto as public include
+
 require "#{ENV['CORTO_BUILD']}/package"
