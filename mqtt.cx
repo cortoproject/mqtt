@@ -3,6 +3,7 @@
 class Connector: mount,hidden::
   alias mount: mount/mount
   alias type: mount/type
+  alias policy: mount/policy
   topic: string
   host: string
 
