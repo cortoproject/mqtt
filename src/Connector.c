@@ -40,40 +40,8 @@ static void mqtt_onMessage(
 
     corto_debug("mqtt: %s: received '%s'", msg->topic, msg->payload);
 
-    /* Check if object already exists in object store */
-    if ((o = corto_lookup(corto_mount(this)->mount, name))) {
-        corto_debug("mqtt: found '%s' for '%s'", corto_fullpath(NULL, o), name);
-
-        /* Only continue updating object when it is owned by mqtt */
-        if (corto_owned(o)) {
-            /* Start updating object (takes a writelock) */
-            if (!corto_updateBegin(o)) {
-                /* Serialize value from JSON string */
-                if (corto_fromcontent(o, "text/json", valueStr)) {
-                    corto_error("mqtt: failed to deserialize for %s: %s (%s)\n",
-                        name,
-                        corto_lasterr(),
-                        msg->payload);
-
-                    /* If deserialization fails, cancel the update. No notification
-                     * will be sent. */
-                    corto_updateCancel(o);
-                    goto error;
-                }
-                /* Successful update. Send notification and unlock object */
-                corto_updateEnd(o);
-            } else {
-                /* For some reason, couldn't start updating object */
-                corto_error("mqtt: failed to update '%s': %s", name, corto_lasterr());
-                goto error;
-            }
-        } else {
-            corto_debug("mqtt: '%s' not owned by me (%s, defined = %d), ignoring",
-                corto_fullpath(NULL, o),
-                corto_ownerof(o) ? corto_fullpath(NULL, o) : "local",
-                corto_checkState(o, CORTO_DEFINED));
-        }
-    } else {
+    /* If object doesn't yet exist in the store, create it */
+    if (!(o = corto_lookup(corto_mount(this)->mount, name))) {
         corto_id buffer;
         corto_debug("mqtt: creating new object for '%s'", name);
 
@@ -106,22 +74,41 @@ static void mqtt_onMessage(
             corto_error("mqtt: failed to create object '%s'", name);
             goto error;
         }
+    } else {
+        corto_debug("mqtt: found '%s' for '%s'", corto_fullpath(NULL, o), name);
+    }
 
-        /* Serialize value from JSON payload */
-        if (corto_fromcontent(o, "text/json", valueStr)) {
-            corto_error("mqtt: failed to deserialize for %s: %s (%s)",
-              name,
-              corto_lasterr(),
-              msg->payload);
+    /* Only continue updating object when it is owned by mqtt */
+    if (corto_owned(o)) {
+        /* Start updating object (takes a writelock) */
+        if (!corto_updateBegin(o)) {
+            /* Serialize value from JSON string */
+            if (corto_fromcontent(o, "text/json", valueStr)) {
+                corto_error("mqtt: failed to deserialize for %s: %s (%s)\n",
+                    name,
+                    corto_lasterr(),
+                    msg->payload);
+
+                /* If deserialization fails, cancel the update. No notification
+                 * will be sent. */
+                corto_updateCancel(o);
+                goto error;
+            }
+            /* Successful update. Send notification and unlock object */
+            if (corto_updateEnd(o)) {
+                corto_error("mqtt: failed to update '%s': %s", name, corto_lasterr());
+                goto error;
+            }
+        } else {
+            /* For some reason, couldn't start updating object */
+            corto_error("mqtt: failed to start updating '%s': %s", name, corto_lasterr());
             goto error;
         }
-
-        /* Define object. This marks the point in time where the object value has
-         * become ready for distribution. */
-        if (corto_define(o)) {
-            corto_error("mqtt: failed to define '%s'", corto_idof(o));
-            goto error;
-        }
+    } else {
+        corto_debug("mqtt: '%s' not owned by me (%s, defined = %d), ignoring",
+            corto_fullpath(NULL, o),
+            corto_ownerof(o) ? corto_fullpath(NULL, o) : "local",
+            corto_checkState(o, CORTO_DEFINED));
     }
 
 error:
@@ -135,10 +122,10 @@ static void mqtt_onConnect(
     int rc)
 {
     /* Subscribe to topic when connected to the broker */
+    mqtt_Connector this = data;
     if (rc != 0) {
         corto_error("mqtt: unable to connect to %s", this->host);
     } else {
-        mqtt_Connector this = data;
         corto_id topic;
         strcpy(topic, this->topic);
 
@@ -310,7 +297,6 @@ corto_void _mqtt_Connector_onUpdate(
     corto_debug("mqtt: topic:%s payload:'%s'", topic, payload);
 
     if (payload != value) corto_dealloc(payload);
-error:
-    return;
+
 /* $end */
 }
