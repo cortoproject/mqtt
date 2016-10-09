@@ -1,4 +1,4 @@
-#package corto/mqtt
+#package /mqtt
 
 class Connector: mount,hidden::
   alias mount: mount/mount
@@ -10,6 +10,4 @@ class Connector: mount,hidden::
   int16 construct()
   void destruct()
 
-  void onDeclare(object observable)
-  void onUpdate(object observable)
-  void onDelete(object observable)
+  void onNotify(core/eventMask event, core/result object)

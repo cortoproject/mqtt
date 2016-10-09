@@ -6,7 +6,7 @@
  * when the file is regenerated.
  */
 
-#include <corto/mqtt/mqtt.h>
+#include <mqtt/mqtt.h>
 
 /* $header() */
 #include "mosquitto.h"

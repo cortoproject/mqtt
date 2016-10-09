@@ -6,7 +6,7 @@
  * when the file is regenerated.
  */
 
-#include <corto/mqtt/mqtt.h>
+#include <mqtt/mqtt.h>
 
 /* $header() */
 #include "mosquitto.h"
@@ -150,13 +150,12 @@ static void mqtt_onLog(struct mosquitto *mosq, void *obj, int level, const char 
 {
     corto_debug("%s", str);
 }
-
 /* $end */
 
 corto_int16 _mqtt_Connector_construct(
     mqtt_Connector this)
 {
-/* $begin(corto/mqtt/Connector/construct) */
+/* $begin(mqtt/Connector/construct) */
     struct mosquitto *mosq = mosquitto_new(NULL, TRUE, this);
     corto_id host;
     corto_uint16 port;
@@ -175,6 +174,8 @@ corto_int16 _mqtt_Connector_construct(
         corto_seterr("mqtt: out of memory");
         goto error;
     }
+
+    corto_mount_setContentType(this, "text/json");
 
     /* onConnect subscribes for the topic. onMessage inserts data from MQTT into
      * corto. onLog traces debug information from Mosquitto. */
@@ -211,7 +212,7 @@ error:
 corto_void _mqtt_Connector_destruct(
     mqtt_Connector this)
 {
-/* $begin(corto/mqtt/Connector/destruct) */
+/* $begin(mqtt/Connector/destruct) */
     struct mosquitto *mosq = corto_olsGet(this, MQTT_KEY_CLIENT);
 
     corto_trace("mqtt: disconnecting...");
@@ -222,81 +223,36 @@ corto_void _mqtt_Connector_destruct(
 /* $end */
 }
 
-corto_void _mqtt_Connector_onDeclare(
+corto_void _mqtt_Connector_onNotify(
     mqtt_Connector this,
-    corto_object observable)
+    corto_eventMask event,
+    corto_result *object)
 {
-/* $begin(corto/mqtt/Connector/onDeclare) */
+/* $begin(mqtt/Connector/onNotify) */
+    if (event == CORTO_ON_UPDATE) {
+        int ret = 0;
+        corto_id topic;
+        corto_string payload = (corto_string)object->value;
+        corto_int32 mid = 0;
+        struct mosquitto *mosq = corto_olsGet(this, MQTT_KEY_CLIENT);
 
-    /* << Insert implementation >> */
+        /* Get object name relative to mount, prefix it with the topic */
+        sprintf(topic, "%s/%s/%s", this->topic, object->parent, object->id);
+        corto_cleanpath(topic, topic);
 
-/* $end */
-}
-
-corto_void _mqtt_Connector_onDelete(
-    mqtt_Connector this,
-    corto_object observable)
-{
-/* $begin(corto/mqtt/Connector/onDelete) */
-
-    /* << Insert implementation >> */
-
-/* $end */
-}
-
-corto_void _mqtt_Connector_onUpdate(
-    mqtt_Connector this,
-    corto_object observable)
-{
-/* $begin(corto/mqtt/Connector/onUpdate) */
-    int ret = 0;
-    corto_id topic, objName;
-    corto_id typeName;
-    corto_string payload = NULL, value = NULL;
-    corto_int32 mid = 0;
-    struct mosquitto *mosq = corto_olsGet(this, MQTT_KEY_CLIENT);
-
-    /* Get object name relative to mount, prefix it with the topic */
-    corto_path(objName, corto_mount(this)->mount, observable, "/");
-    sprintf(topic, "%s/%s", this->topic, objName);
-
-    /* Get object JSON */
-    value = corto_contentof(NULL, "text/json", observable);
-
-    /* If the type is not explicitly set, this connector will potentially
-     * receive updates from objects of any type. In that case, prefix the type
-     * to the payload so that a receiving application is able to figure out the
-     * type of the object.
-     * Note that this requires both sending and receiving side to use the same
-     * type for the specified topic. */
-    if (!corto_mount(this)->type) {
-        corto_fullpath(typeName, corto_typeof(observable));
-
-        /* If object is a primitive, wrap it in {} */
-        if (value[0] == '{') {
-            corto_asprintf(&payload, "%s%s", typeName, value);
-        } else {
-            corto_asprintf(&payload, "%s{%s}", typeName, value);
+        /* Finally, publish the message to mqtt */
+        if ((ret = mosquitto_publish(mosq, &mid, topic, strlen(payload) + 1, payload, 1, FALSE))) {
+            switch (ret) {
+            case MOSQ_ERR_INVAL: corto_error("mqtt: publish failed: invalid input"); break;
+            case MOSQ_ERR_NOMEM: corto_error("mqtt: publish failed: out of memory"); break;
+            case MOSQ_ERR_NO_CONN: corto_warning("mqtt: publish failed: not (yet) connected"); break;
+            case MOSQ_ERR_PROTOCOL: corto_error("mqtt: publish failed: protocol error"); break;
+            case MOSQ_ERR_PAYLOAD_SIZE: corto_error("mqtt: publish failed: message too large (%d)", strlen(payload)); break;
+            default: corto_error("mqtt: publish error: unknown error"); break;
+            }
         }
-    } else {
-        payload = value;
+
+        corto_debug("mqtt: topic:%s payload:'%s'", topic, payload);
     }
-
-    /* Finally, publish the message to mqtt */
-    if ((ret = mosquitto_publish(mosq, &mid, topic, strlen(payload) + 1, payload, 1, FALSE))) {
-        switch (ret) {
-        case MOSQ_ERR_INVAL: corto_error("mqtt: publish failed: invalid input"); break;
-        case MOSQ_ERR_NOMEM: corto_error("mqtt: publish failed: out of memory"); break;
-        case MOSQ_ERR_NO_CONN: corto_warning("mqtt: publish failed: not (yet) connected"); break;
-        case MOSQ_ERR_PROTOCOL: corto_error("mqtt: publish failed: protocol error"); break;
-        case MOSQ_ERR_PAYLOAD_SIZE: corto_error("mqtt: publish failed: message too large (%d)", strlen(payload)); break;
-        default: corto_error("mqtt: publish error: unknown error"); break;
-        }
-    }
-
-    corto_debug("mqtt: topic:%s payload:'%s'", topic, payload);
-
-    if (payload != value) corto_dealloc(payload);
-
 /* $end */
 }

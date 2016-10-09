@@ -1,5 +1,5 @@
 
-PACKAGE = 'corto/mqtt'
+PACKAGE = 'mqtt'
 
 INCLUDE = ['src/mosquitto']
 INCLUDE_PUBLIC = ['.'] # do not expose src/mosquitto as public include
