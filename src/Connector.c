@@ -47,8 +47,8 @@ static void mqtt_onMessage(
 
         /* If the mount has been configured with a fixed type, use that type to
          * create a new object. Otherwise, look for type in payload. */
-        if (corto_mount(this)->type) {
-            strcpy(buffer, corto_mount(this)->type);
+        if (corto_observer(this)->type) {
+            strcpy(buffer, corto_observer(this)->type);
         } else {
             char *typeStr = strchr(msg->payload, '{');
             memcpy(buffer, msg->payload, typeStr - (char*)msg->payload);
@@ -176,6 +176,14 @@ corto_int16 _mqtt_Connector_construct(
     }
 
     corto_mount_setContentType(this, "text/json");
+
+    if (!corto_mount(this) && corto_checkAttr(this, CORTO_ATTR_SCOPED)) {
+        corto_setref(&corto_mount(this)->mount, this);
+    }
+
+    if (!this->topic) {
+        corto_setstr(&this->topic, corto_idof(corto_mount(this)->mount));
+    }
 
     /* onConnect subscribes for the topic. onMessage inserts data from MQTT into
      * corto. onLog traces debug information from Mosquitto. */
