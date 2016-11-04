@@ -119,7 +119,7 @@ static void mqtt_onMessage(
                 goto error;
             }
         }
-    } else {
+    } else if (o) {
         corto_debug("mqtt: '%s' not owned by me (%s, defined = %d), ignoring",
             corto_fullpath(NULL, o),
             corto_ownerof(o) ? corto_fullpath(NULL, o) : "local",
