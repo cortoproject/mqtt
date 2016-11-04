@@ -87,8 +87,7 @@ static void mqtt_onMessage(
     }
 
     /* Only continue updating object when it is owned by mqtt */
-    if (corto_owned(o)) {
-        printf("###### DELETE\n");
+    if (o && corto_owned(o)) {
         if (isDelete) {
             if (corto_delete(o)) {
                 corto_error("mqtt: failed to delete '%s': %s", name, corto_lasterr());
