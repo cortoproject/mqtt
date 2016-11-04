@@ -18,9 +18,11 @@ static void mqtt_onMessage(
     void *data,
     const struct mosquitto_message *msg)
 {
-    char *name;
+    corto_id nameBuffer;
+    char *name = nameBuffer;
     corto_object o = NULL;
     mqtt_Connector this = data;
+    corto_bool isDelete = FALSE;
 
     /* If the payload has been serialized as a corto string, the typename is
      * potentially prefixed to the value */
@@ -33,15 +35,21 @@ static void mqtt_onMessage(
     corto_object prevOwner = corto_setOwner(this);
 
     /* Remove topic from name, so that name is relative to mount point. */
-    name = msg->topic;
+    strcpy(name, msg->topic);
     if (this->topic) {
         name += strlen(this->topic) + 1;
+    }
+
+    char *lastElem = strrchr(name, '/');
+    if (lastElem && !strcmp(lastElem, "/_d")) {
+        *lastElem = '\0';
+        isDelete = TRUE;
     }
 
     corto_debug("mqtt: %s: received '%s'", msg->topic, msg->payload);
 
     /* If object doesn't yet exist in the store, create it */
-    if (!(o = corto_lookup(corto_mount(this)->mount, name))) {
+    if (!(o = corto_lookup(corto_mount(this)->mount, name)) && !isDelete) {
         corto_id buffer;
         corto_debug("mqtt: creating new object for '%s'", name);
 
@@ -80,29 +88,37 @@ static void mqtt_onMessage(
 
     /* Only continue updating object when it is owned by mqtt */
     if (corto_owned(o)) {
-        /* Start updating object (takes a writelock) */
-        if (!corto_updateBegin(o)) {
-            /* Serialize value from JSON string */
-            if (corto_fromcontent(o, "text/json", valueStr)) {
-                corto_error("mqtt: failed to deserialize for %s: %s (%s)\n",
-                    name,
-                    corto_lasterr(),
-                    msg->payload);
-
-                /* If deserialization fails, cancel the update. No notification
-                 * will be sent. */
-                corto_updateCancel(o);
-                goto error;
+        printf("###### DELETE\n");
+        if (isDelete) {
+            if (corto_delete(o)) {
+                corto_error("mqtt: failed to delete '%s': %s", name, corto_lasterr());
             }
-            /* Successful update. Send notification and unlock object */
-            if (corto_updateEnd(o)) {
-                corto_error("mqtt: failed to update '%s': %s", name, corto_lasterr());
-                goto error;
-            }
+            corto_release(o);
         } else {
-            /* For some reason, couldn't start updating object */
-            corto_error("mqtt: failed to start updating '%s': %s", name, corto_lasterr());
-            goto error;
+            /* Start updating object (takes a writelock) */
+            if (!corto_updateBegin(o)) {
+                /* Serialize value from JSON string */
+                if (corto_fromcontent(o, "text/json", valueStr)) {
+                    corto_error("mqtt: failed to deserialize for %s: %s (%s)\n",
+                        name,
+                        corto_lasterr(),
+                        msg->payload);
+
+                    /* If deserialization fails, cancel the update. No notification
+                     * will be sent. */
+                    corto_updateCancel(o);
+                    goto error;
+                }
+                /* Successful update. Send notification and unlock object */
+                if (corto_updateEnd(o)) {
+                    corto_error("mqtt: failed to update '%s': %s", name, corto_lasterr());
+                    goto error;
+                }
+            } else {
+                /* For some reason, couldn't start updating object */
+                corto_error("mqtt: failed to start updating '%s': %s", name, corto_lasterr());
+                goto error;
+            }
         }
     } else {
         corto_debug("mqtt: '%s' not owned by me (%s, defined = %d), ignoring",
@@ -237,7 +253,7 @@ corto_void _mqtt_Connector_onNotify(
     corto_result *object)
 {
 /* $begin(mqtt/Connector/onNotify) */
-    if (event == CORTO_ON_UPDATE) {
+    if ((event == CORTO_ON_UPDATE) || (event == CORTO_ON_DELETE)) {
         int ret = 0;
         corto_id topic;
         corto_string payload = (corto_string)object->value;
@@ -247,6 +263,10 @@ corto_void _mqtt_Connector_onNotify(
         /* Get object name relative to mount, prefix it with the topic */
         sprintf(topic, "%s/%s/%s", this->topic, object->parent, object->id);
         corto_cleanpath(topic, topic);
+
+        if (event == CORTO_ON_DELETE) {
+            strcat(topic, "/_d");
+        }
 
         /* Finally, publish the message to mqtt */
         if ((ret = mosquitto_publish(mosq, &mid, topic, strlen(payload) + 1, payload, 1, FALSE))) {
