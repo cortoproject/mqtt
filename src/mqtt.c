@@ -13,7 +13,7 @@
 corto_uint8 MQTT_KEY_CLIENT;
 /* $end */
 
-int mqttMain(int argc, char* argv[]) {
+int mqttMain(int argc, char *argv[]) {
 /* $begin(main) */
     /* Insert code that must be run when component is loaded */
     CORTO_UNUSED(argc);

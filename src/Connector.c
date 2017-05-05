@@ -167,7 +167,7 @@ static void mqtt_onLog(struct mosquitto *mosq, void *obj, int level, const char 
 }
 /* $end */
 
-corto_int16 _mqtt_Connector_construct(
+int16_t _mqtt_Connector_construct(
     mqtt_Connector this)
 {
 /* $begin(mqtt/Connector/construct) */
@@ -232,7 +232,7 @@ error:
 /* $end */
 }
 
-corto_void _mqtt_Connector_destruct(
+void _mqtt_Connector_destruct(
     mqtt_Connector this)
 {
 /* $begin(mqtt/Connector/destruct) */
@@ -246,7 +246,7 @@ corto_void _mqtt_Connector_destruct(
 /* $end */
 }
 
-corto_void _mqtt_Connector_onNotify(
+void _mqtt_Connector_onNotify(
     mqtt_Connector this,
     corto_eventMask event,
     corto_result *object)

@@ -7,20 +7,22 @@
 #define MQTT_H
 
 #include <corto/corto.h>
-#include <mqtt/_interface.h>
+#include <corto/corto.h>
+#include <mqtt/_project.h>
+#include <corto/c/c.h>
+
+/* $header() */
+/* Enter additional code here. */
+/* $end */
 
 #include <mqtt/_type.h>
-#include <mqtt/_api.h>
-#include <mqtt/_meta.h>
+#include <mqtt/_interface.h>
+#include <mqtt/_load.h>
+#include <mqtt/c/_api.h>
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+/* $body() */
+/* Enter code that requires types here */
+/* $end */
 
-#include <mqtt/Connector.h>
-
-#ifdef __cplusplus
-}
-#endif
 #endif
 
