@@ -193,11 +193,11 @@ int16_t _mqtt_Connector_construct(
     corto_mount_setContentType(this, "text/json");
 
     if (!corto_mount(this) && corto_checkAttr(this, CORTO_ATTR_SCOPED)) {
-        corto_setref(&corto_mount(this)->mount, this);
+        corto_ptr_setref(&corto_mount(this)->mount, this);
     }
 
     if (!this->topic) {
-        corto_setstr(&this->topic, corto_idof(corto_mount(this)->mount));
+        corto_ptr_setstr(&this->topic, corto_idof(corto_mount(this)->mount));
     }
 
     /* onConnect subscribes for the topic. onMessage inserts data from MQTT into
